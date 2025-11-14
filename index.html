@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DEPARTAMENTO OPERACIONAL:Tarefas Diárias Relevantes</title>
+    <title>DEPARTAMENTO OPERACIONAL: Painel de Tarefas Diárias</title>
     <!-- Importa o Tailwind CSS para estilização moderna e responsiva -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -74,7 +74,7 @@
 <body class="min-h-screen bg-gray-100 p-4 md:p-8">
     <div class="max-w-7xl mx-auto">
         <h1 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">
-            DEPARTAMENTO OPERACIONAL:Tarefas Diárias Relevantes
+            DEPARTAMENTO OPERACIONAL: Tarefas Diárias Relevantes
         </h1>
 
         <!-- Container para Mensagens de Feedback (Salvo com sucesso, Erro, etc.) -->
@@ -101,30 +101,45 @@
             </div>
         </div>
 
-        <!-- NOVO PAINEL DE AÇÕES -->
-        <div class="text-center mt-6 p-4 bg-white rounded-xl shadow-lg flex flex-col sm:flex-row justify-center items-center gap-4 no-print">
+        <!-- PAINEL DE AÇÕES (Expandido para 4 botões) -->
+        <div class="text-center mt-6 p-4 bg-white rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-4 no-print">
             
             <button
                 id="save-tasks-btn"
                 onclick="saveTasks()"
-                class="flex-1 w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-indigo-700 transition duration-200 disabled:bg-indigo-400 disabled:cursor-not-allowed"
+                class="px-3 py-3 bg-indigo-600 text-white font-semibold rounded-full shadow-lg hover:bg-indigo-700 transition duration-200 disabled:bg-indigo-400 disabled:cursor-not-allowed text-sm md:text-base"
             >
-                Salvar Todas as Tarefas
+                Salvar Localmente
+            </button>
+
+            <button
+                onclick="exportDataAsJSON()"
+                class="px-3 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition duration-200 text-sm md:text-base"
+            >
+                Exportar Dados (JSON)
             </button>
             
             <button
-                onclick="exportToPDF()"
-                class="flex-1 w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-emerald-700 transition duration-200"
+                onclick="importDataFromJSON()"
+                class="px-3 py-3 bg-purple-600 text-white font-semibold rounded-full shadow-lg hover:bg-purple-700 transition duration-200 text-sm md:text-base"
             >
-                Exportar para PDF
+                Importar Dados (JSON)
             </button>
 
             <button
                 onclick="resetTasks()"
-                class="flex-1 w-full sm:w-auto px-6 py-3 bg-red-600 text-white text-lg font-semibold rounded-full shadow-lg hover:bg-red-700 transition duration-200"
+                class="px-3 py-3 bg-red-600 text-white font-semibold rounded-full shadow-lg hover:bg-red-700 transition duration-200 text-sm md:text-base"
             >
-                Zerar Dados e Iniciar Novo Ciclo
+                Zerar Ciclo
             </button>
+
+             <button
+                onclick="exportToPDF()"
+                class="col-span-2 md:col-span-4 px-3 py-3 bg-emerald-600 text-white font-semibold rounded-full shadow-lg hover:bg-emerald-700 transition duration-200 text-sm md:text-base"
+            >
+                Gerar PDF (Imprimir Painel Completo)
+            </button>
+
         </div>
     </div>
 
@@ -287,9 +302,75 @@
 
             if(saveButton) {
                 saveButton.disabled = false;
-                saveButton.innerText = 'Salvar Todas as Tarefas';
+                saveButton.innerText = 'Salvar Localmente';
             }
             if (success) showMessage("Painel de Tarefas salvo com sucesso!");
+        };
+
+        // --- NOVO: EXPORTAÇÃO DE DADOS (JSON) ---
+        window.exportDataAsJSON = () => {
+            try {
+                const dataStr = JSON.stringify(dailyTasks, null, 2);
+                // Cria um Blob e um URL para download
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                const exportFileName = `DEPARTAMENTO_OPERACIONAL_Tarefas_${new Date().toISOString().slice(0, 10)}.json`;
+
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', url);
+                linkElement.setAttribute('download', exportFileName);
+                linkElement.click();
+                
+                // Limpeza
+                URL.revokeObjectURL(url);
+                showMessage("Dados exportados! Transfira este arquivo JSON para outro dispositivo para sincronizar.");
+            } catch (error) {
+                showMessage("Erro ao exportar dados.", true);
+                console.error("Export Error:", error);
+            }
+        };
+
+        // --- NOVO: IMPORTAÇÃO DE DADOS (JSON) ---
+        window.importDataFromJSON = () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'application/json';
+
+            fileInput.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        
+                        // Validação básica: verifica se é uma estrutura de 30 dias com array de tarefas
+                        if (Array.isArray(importedData) && importedData.length === 30 && importedData[0].tarefas) {
+                            
+                            // Atualiza o estado e garante que o dayIndex está correto
+                            dailyTasks = importedData.map((day, index) => ({
+                                ...day,
+                                dayIndex: index,
+                            }));
+                            
+                            saveTasksToLocalStorage(dailyTasks); // Salva os dados importados no navegador atual
+                            renderApplication();
+                            showMessage("Dados importados e sincronizados localmente com sucesso!");
+
+                        } else {
+                            showMessage("Erro: Arquivo JSON inválido ou incompatível. Certifique-se de que é um arquivo de tarefas BLADETEC.", true);
+                        }
+                    } catch (error) {
+                        showMessage("Erro ao processar o arquivo JSON. Certifique-se de que é um JSON válido.", true);
+                        console.error("Import Error:", error);
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            fileInput.click();
         };
 
         // --- ZERAR DADOS E INICIAR NOVO CICLO ---
