@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DEPARTAMENTO OPERACIONAL: Painel de Tarefas Diárias</title>
+    <title>DEPARTAMENTO OPERACIONAL: Painel de Controle Completo</title>
     <!-- Importa o Tailwind CSS para estilização moderna e responsiva -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -11,10 +11,9 @@
         /* Define a fonte Inter (padrão do Tailwind) */
         body { font-family: "Inter", sans-serif; }
         
-        /* Estilos para cores dos cards de tarefa (bordas laterais) */
+        /* Estilos para cores dos cards de tarefa (bordas laterais) - ABA TAREFAS */
         .task-card {
             border-left-width: 4px;
-            /* Garante que o cartão ocupe a altura total do grid */
             height: 100%;
             display: flex;
             flex-direction: column;
@@ -23,10 +22,14 @@
         .task-pending { border-color: #F59E0B; } /* Amber-500 */
         .task-in-progress { border-color: #3B82F6; } /* Blue-500 */
 
+        /* Estilos para cores dos cards de projeto (bordas laterais) - ABA KANBAN */
+        .project-card-border { border-left-width: 4px; }
+        .project-done { border-color: #059669; } /* Dark Emerald-600 */
+        .project-pending { border-color: #DC2626; } /* Dark Red-600 */
+        .project-in-progress { border-color: #4B5563; } /* Dark Gray-600 */
+
         /* Estilo para a barra de rolagem dos cartões */
-        .task-scroll-area::-webkit-scrollbar {
-            width: 6px;
-        }
+        .task-scroll-area::-webkit-scrollbar { width: 6px; }
         .task-scroll-area::-webkit-scrollbar-thumb {
             background-color: #d1d5db; /* gray-300 */
             border-radius: 3px;
@@ -44,26 +47,47 @@
         .modal-content {
             z-index: 1001;
             max-width: 90%;
-            max-height: 90%;
+            max-height: 90%; /* Mantém o limite de altura */
+            display: flex; /* Permite layout flexível interno */
+            flex-direction: column; /* Coloca elementos em coluna */
+        }
+        /* Novo estilo para a área de conteúdo do modal que deve rolar */
+        #modal-body-wrapper {
+            overflow-y: auto;
+            flex-grow: 1; /* Permite que esta área ocupe o espaço restante */
+            padding-right: 1rem; /* Espaço para a barra de rolagem se necessário */
         }
 
         /* Estilos para impressão (Exportar PDF) */
         @media print {
-            body {
-                background-color: white !important;
-                padding: 0;
-            }
+            body { background-color: white !important; padding: 0; }
             /* Esconde o painel de botões, o dashboard e o modal na impressão */
-            .no-print, .modal-overlay {
+            .no-print, .modal-overlay { display: none !important; }
+            
+            /* --- CORREÇÃO DE IMPRESSÃO --- */
+            /* Remove a regra antiga que mostrava tudo */
+            /* #tasks-view, #kanban-view { display: block !important; } */
+
+            /* Por padrão, esconde as duas vistas na impressão */
+             #tasks-view, #kanban-view {
                 display: none !important;
-            }
-            /* Otimiza a grade para layout de coluna única na impressão */
-            #tasks-grid {
+             }
+             /* Mostra APENAS a vista de tarefas se o body tiver a classe */
+             body.printing-tasks #tasks-view {
+                display: block !important;
+             }
+             /* Mostra APENAS a vista do kanban se o body tiver a classe */
+             body.printing-kanban #kanban-view {
+                display: block !important;
+             }
+             /* --- FIM DA CORREÇÃO --- */
+
+            #tasks-grid, #kanban-board > div {
                 display: block !important;
                 height: auto !important;
                 overflow: visible !important;
             }
-            .task-card {
+            .task-card, .project-card-border {
                 page-break-inside: avoid;
                 margin-bottom: 1rem;
                 height: auto;
@@ -73,61 +97,111 @@
 </head>
 <body class="min-h-screen bg-gray-100 p-4 md:p-8">
     <div class="max-w-7xl mx-auto">
-        <h1 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">
-            DEPARTAMENTO OPERACIONAL: Tarefas Diárias Relevantes
+        <h1 class="4xl font-extrabold text-gray-900 mb-6 text-center">
+            DEPARTAMENTO OPERACIONAL: Painel de Controle Completo
         </h1>
 
         <!-- Container para Mensagens de Feedback (Salvo com sucesso, Erro, etc.) -->
         <div id="message-container" class="fixed top-4 right-4 z-50 transition-all duration-300 transform"></div>
 
-        <!-- Dashboard de KPIs de Tarefas (Novo) -->
-        <div id="dashboard-container" class="mb-6 no-print">
-            <!-- KPIs renderizados aqui -->
+        <!-- BARRA DE NAVEGAÇÃO POR ABAS -->
+        <div class="no-print bg-white rounded-t-xl shadow-lg border-b border-gray-200 mb-0 px-4 pt-2">
+            <nav class="flex space-x-4">
+                <button 
+                    id="tab-tasks"
+                    onclick="switchTab('tasks')"
+                    class="py-3 px-4 font-semibold text-lg border-b-4 transition duration-300"
+                    data-active-class="border-indigo-600 text-indigo-600"
+                    data-inactive-class="border-transparent text-gray-500 hover:text-gray-800"
+                >
+                    Tarefas Diárias (30 Dias)
+                </button>
+                <button 
+                    id="tab-kanban"
+                    onclick="switchTab('kanban')"
+                    class="py-3 px-4 font-semibold text-lg border-b-4 transition duration-300"
+                    data-active-class="border-indigo-600 text-indigo-600"
+                    data-inactive-class="border-transparent text-gray-500 hover:text-gray-800"
+                >
+                    Kanban de Projetos
+                </button>
+            </nav>
         </div>
 
-        <!-- Conteúdo do Painel de Tarefas -->
-        <div class="bg-white p-4 md:p-6 rounded-xl shadow-2xl">
+        <!-- Dashboard e Conteúdo (Container Principal) -->
+        <div class="bg-white p-4 md:p-6 rounded-b-xl shadow-2xl">
+            
             <div class="text-center p-10 text-lg font-medium text-indigo-600" id="loading-initial">
                 <!-- Ícone de Carregamento -->
                 <svg class="animate-spin h-6 w-6 mr-3 inline text-indigo-600" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 Carregando painel...
             </div>
-            <!-- Painel de Tarefas Diárias (Grid) -->
-            <div id="tasks-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" style="height: 600px; overflow-y: auto;">
-                <!-- Cartões de tarefas renderizados aqui -->
+
+            <!-- Dashboard de KPIs de Tarefas (Aba Tarefas) -->
+            <div id="tasks-dashboard-container" class="mb-6 no-print"></div>
+
+            <!-- VISÃO GERAL DAS TAREFAS DIÁRIAS (CONTEÚDO EXISTENTE) -->
+            <!-- AJUSTE DE ALTURA 1: Alterado de h-[600px] para h-[750px] -->
+            <div id="tasks-view" class="h-[750px]">
+                <div id="tasks-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 h-full overflow-y-auto">
+                    <!-- Cartões de tarefas renderizados aqui (Tarefas Diárias) -->
+                </div>
             </div>
+
+            <!-- Dashboard de KPIs de Projetos (Aba Kanban) -->
+            <div id="kanban-dashboard-container" class="mb-6 no-print hidden"></div>
+            
+            <!-- VISÃO GERAL DO KANBAN DE PROJETOS (NOVA ABA) -->
+            <!-- AJUSTE DE ALTURA 2: Adicionado h-[750px] -->
+            <div id="kanban-view" class="hidden h-[750px]">
+                <div class="no-print mb-4 flex justify-end">
+                    <button
+                        onclick="openProjectDetailModal(null, true)"
+                        class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-full shadow-lg hover:bg-indigo-700 transition duration-200 text-sm md:text-base"
+                    >
+                        + Novo Projeto
+                    </button>
+                </div>
+
+                <!-- AJUSTE DE ALTURA 3: Alterado de h-[550px] para h-full -->
+                <!-- CORREÇÃO DE LAYOUT: Adicionado bg-gray-100, rounded-lg e p-4 para criar um "fundo" para o quadro Kanban -->
+                <div id="kanban-board" class="flex flex-col md:flex-row gap-4 h-full overflow-x-auto p-4 task-scroll-area bg-gray-100 rounded-lg">
+                    <!-- Colunas do Kanban renderizadas aqui -->
+                </div>
+            </div>
+
         </div>
 
-        <!-- PAINEL DE AÇÕES (Expandido para 4 botões) -->
+        <!-- PAINEL DE AÇÕES (Controlado pela aba ativa) -->
         <div class="text-center mt-6 p-4 bg-white rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-4 no-print">
             
             <button
                 id="save-tasks-btn"
-                onclick="saveTasks()"
+                onclick="handleSave()"
                 class="px-3 py-3 bg-indigo-600 text-white font-semibold rounded-full shadow-lg hover:bg-indigo-700 transition duration-200 disabled:bg-indigo-400 disabled:cursor-not-allowed text-sm md:text-base"
             >
                 Salvar Localmente
             </button>
 
             <button
-                onclick="exportDataAsJSON()"
+                onclick="handleExport()"
                 class="px-3 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition duration-200 text-sm md:text-base"
             >
                 Exportar Dados (JSON)
             </button>
             
             <button
-                onclick="importDataFromJSON()"
+                onclick="handleImport()"
                 class="px-3 py-3 bg-purple-600 text-white font-semibold rounded-full shadow-lg hover:bg-purple-700 transition duration-200 text-sm md:text-base"
             >
                 Importar Dados (JSON)
             </button>
 
             <button
-                onclick="resetTasks()"
+                onclick="handleReset()"
                 class="px-3 py-3 bg-red-600 text-white font-semibold rounded-full shadow-lg hover:bg-red-700 transition duration-200 text-sm md:text-base"
             >
                 Zerar Ciclo
@@ -143,43 +217,30 @@
         </div>
     </div>
 
-    <!-- MODAL DE DETALHES DA TAREFA (NOVO) -->
-    <div id="task-detail-modal" class="modal-overlay hidden fixed inset-0 flex items-center justify-center p-4" onclick="closeTaskDetailModal()">
+    <!-- MODAL DE DETALHES (USADO POR AMBAS AS ABAS, COM CONTEÚDO DINÂMICO) -->
+    <div id="detail-modal" class="modal-overlay hidden fixed inset-0 flex items-center justify-center p-4" onclick="closeDetailModal()">
         <div class="modal-content bg-white p-6 rounded-xl shadow-2xl w-full md:w-1/2 lg:w-1/3" onclick="event.stopPropagation()">
-            <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Detalhes da Tarefa</h3>
+            <!-- Cabeçalho (Fixo) -->
+            <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4 border-b pb-2 flex-shrink-0">Detalhes</h3>
             
-            <div id="modal-body" class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <label for="modal-status" class="font-semibold text-gray-700">Status:</label>
-                    <select id="modal-status" class="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 text-sm">
-                        <!-- Options populated by JS -->
-                    </select>
+            <!-- Corpo (Rolável) -->
+            <div id="modal-body-wrapper">
+                <div id="modal-body" class="space-y-4">
+                    <!-- Conteúdo do modal (Tarefa ou Projeto) será injetado aqui -->
                 </div>
-
-                <div>
-                    <label for="modal-description" class="font-semibold text-gray-700 block mb-1">Descrição Detalhada:</label>
-                    <textarea 
-                        id="modal-description" 
-                        rows="6" 
-                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 resize-y"
-                        placeholder="Detalhes e passos para executar a tarefa..."
-                    ></textarea>
-                </div>
-                
-                <p id="modal-day-info" class="text-xs text-gray-500 text-right"></p>
-
             </div>
 
-            <div class="mt-6 flex justify-end gap-3 border-t pt-4">
+            <!-- Rodapé (Fixo) -->
+            <div class="mt-6 flex justify-end gap-3 border-t pt-4 flex-shrink-0">
                 <button 
-                    onclick="closeTaskDetailModal()"
+                    onclick="closeDetailModal()"
                     class="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-full hover:bg-gray-300 transition"
                 >
                     Fechar
                 </button>
                 <button 
                     id="modal-save-btn"
-                    onclick="saveTaskDetailFromModal()"
+                    onclick="handleModalSave()"
                     class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-full shadow-md hover:bg-indigo-700 transition"
                 >
                     Salvar Alterações
@@ -192,17 +253,34 @@
     <script>
         // --- VARIÁVEIS DE ESTADO E AMBIENTE ---
         let dailyTasks = null;
+        let projectsKanban = null;
         let isAppReady = false;
-        let activeTaskInModal = null; // Guarda {dayIndex, taskId} da tarefa aberta
-
-        // Chave do localStorage
+        let activeTab = 'tasks'; // 'tasks' or 'kanban'
+        let activeDataInModal = null; // Guarda o objeto { type: 'task'/'project', id, dayIndex? }
+        
+        // Chaves do localStorage
         const TASKS_STORAGE_KEY = 'blade_daily_tasks_v2'; 
+        const PROJECTS_STORAGE_KEY = 'blade_projects_kanban_v1';
 
-        // Mapeamento de Status
+        // Mapeamento de Status (Tarefas Diárias - Original)
         const STATUS_OPTIONS = [
             { value: 'Pendente', name: 'Pendente', color: 'bg-amber-100 text-amber-800 border-amber-500' },
             { value: 'Em Andamento', name: 'Em Andamento', color: 'bg-blue-100 text-blue-800 border-blue-500' },
             { value: 'Executada', name: 'Executada', color: 'bg-emerald-100 text-emerald-800 border-emerald-500' },
+        ];
+
+        // Mapeamento de Status (Kanban de Projetos - Novo)
+        const KANBAN_STATUS_OPTIONS = [
+            { value: 'Pendente', name: 'Pendente', color: 'bg-red-600 text-white', borderClass: 'project-pending', description: 'Em fila, não iniciado.' },
+            { value: 'Em Andamento', name: 'Em Andamento', color: 'bg-gray-600 text-white', borderClass: 'project-in-progress', description: 'Em progresso, ativo.' },
+            { value: 'Finalizado', name: 'Finalizado', color: 'bg-emerald-600 text-white', borderClass: 'project-done', description: 'Concluído com sucesso.' },
+        ];
+        
+        // Mapeamento de Prioridade (Kanban de Projetos - Novo)
+        const PRIORITY_OPTIONS = [
+            { value: 'Prioridade 1', name: 'P1 - Urgente', color: 'text-red-500 font-bold' },
+            { value: 'Prioridade 2', name: 'P2 - Alta', color: 'text-amber-500 font-semibold' },
+            { value: 'Prioridade 3', name: 'P3 - Normal', color: 'text-blue-500' },
         ];
 
 
@@ -218,13 +296,21 @@
             setTimeout(() => { container.innerHTML = ''; }, 5000);
         };
         
-        const getNextTaskId = (tasks) => {
-            return tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
+        const getNextId = (items) => {
+            return items.length > 0 ? Math.max(...items.map(t => t.id)) + 1 : 1;
         };
-
-        // --- ESTRUTURA DE DADOS INICIAIS ---
+        
+        const formatISODate = (isoDate) => {
+            if (!isoDate) return '';
+            const [year, month, day] = isoDate.split('-');
+            return `${day}/${month}/${year}`;
+        }
+        
+        // --- ESTRUTURAS DE DADOS INICIAIS ---
+        
+        // Estrutura Inicial de Tarefas Diárias (ORIGINAL)
         const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-        const createInitialTasksData = () => {
+        const createInitialDailyTasksData = () => {
             const initialData = [];
             const today = new Date();
             for (let i = 0; i < 30; i++) {
@@ -232,15 +318,14 @@
                 day.setDate(today.getDate() + i);
                 
                 initialData.push({ 
-                    dayIndex: i, // Novo campo para facilitar a manipulação no JS
+                    dayIndex: i,
                     dia: i + 1, 
-                    dataCompleta: day.toISOString().split('T')[0], // YYYY-MM-DD
+                    dataCompleta: day.toISOString().split('T')[0],
                     dataFormatada: `${day.getDate().toString().padStart(2, '0')}/${(day.getMonth() + 1).toString().padStart(2, '0')}`,
                     diaSemana: dayNames[day.getDay()],
-                    tarefas: [], // Array de tarefas
+                    tarefas: [],
                 });
             }
-            // Adiciona algumas tarefas de exemplo
             if (initialData[0]) {
                 initialData[0].tarefas.push(
                     { id: 1, descricao: 'Definir proposta de valor final', status: 'Em Andamento' },
@@ -255,84 +340,152 @@
             return initialData;
         };
 
-        // --- GESTÃO DE DADOS LOCAIS (localStorage) ---
+        // Estrutura Inicial de Projetos (NOVA)
+        const createInitialProjectsData = () => {
+            return [
+                {
+                    id: 1,
+                    nome: 'Lançamento do Produto A',
+                    dataInicial: new Date().toISOString().split('T')[0],
+                    dataFinal: '2025-12-20',
+                    descricao: 'Planejamento e execução de todas as etapas para o lançamento do novo produto.',
+                    status: 'Em Andamento',
+                    categoria: 'Prioridade 1',
+                    executor: 'Equipe de Marketing e Vendas',
+                    tempoExecucao: '36 dias',
+                    custo: 'R$ 15.000',
+                },
+                {
+                    id: 2,
+                    nome: 'Otimização de Processos Internos',
+                    dataInicial: '2025-11-01',
+                    dataFinal: '2025-12-15',
+                    descricao: 'Mapeamento e otimização dos processos de logística e atendimento ao cliente.',
+                    status: 'Pendente',
+                    categoria: 'Prioridade 2',
+                    executor: 'Gerência Operacional',
+                    tempoExecucao: '45 dias',
+                    custo: 'R$ 5.000',
+                }
+            ];
+        };
+
+        // --- GESTÃO DE DADOS (Load / Save / Export / Reset) ---
         
-        const loadDataFromLocalStorage = () => {
+        // Funções de Tarefas Diárias (Original)
+        const loadDailyTasksData = () => {
             try {
                 const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
-                dailyTasks = storedTasks ? JSON.parse(storedTasks) : createInitialTasksData();
-                
-                // MANTÉM compatibilidade e garante 30 dias
+                dailyTasks = storedTasks ? JSON.parse(storedTasks) : createInitialDailyTasksData();
                 if (!Array.isArray(dailyTasks) || dailyTasks.length !== 30 || !dailyTasks[0].tarefas) {
-                    dailyTasks = createInitialTasksData();
+                    dailyTasks = createInitialDailyTasksData();
                 } else {
-                    // Garante que o dayIndex existe se estiver carregando dados antigos
-                     dailyTasks = dailyTasks.map((day, index) => ({
-                        ...day,
-                        dayIndex: index,
-                    }));
+                     dailyTasks = dailyTasks.map((day, index) => ({ ...day, dayIndex: index, }));
                 }
-
-                console.log("Tarefas carregadas do localStorage.");
             } catch (error) {
-                console.error("Erro ao carregar dados do localStorage:", error);
-                dailyTasks = createInitialTasksData();
+                console.error("Erro ao carregar Tarefas:", error);
+                dailyTasks = createInitialDailyTasksData();
             }
         };
 
-        const saveTasksToLocalStorage = (data) => {
+        const saveDailyTasksData = () => {
             try {
-                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(data));
+                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(dailyTasks));
                 return true;
             } catch (error) {
-                console.error("Erro ao salvar Tarefas no localStorage:", error);
-                showMessage("Erro: Falha ao salvar o Painel de Tarefas localmente.", true);
+                console.error("Erro ao salvar Tarefas:", error);
+                showMessage("Erro: Falha ao salvar Tarefas localmente.", true);
                 return false;
             }
         };
 
-        window.saveTasks = () => {
+        const resetDailyTasks = () => {
+            localStorage.removeItem(TASKS_STORAGE_KEY);
+            dailyTasks = createInitialDailyTasksData();
+            renderApplication();
+            showMessage("Dados de Tarefas zerados com sucesso! Novo ciclo de 30 dias iniciado.");
+        };
+
+        // Funções de Kanban de Projetos (Novo)
+        const loadKanbanData = () => {
+            try {
+                const storedProjects = localStorage.getItem(PROJECTS_STORAGE_KEY);
+                projectsKanban = storedProjects ? JSON.parse(storedProjects) : createInitialProjectsData();
+                if (!Array.isArray(projectsKanban)) {
+                     projectsKanban = createInitialProjectsData();
+                }
+            } catch (error) {
+                console.error("Erro ao carregar Projetos:", error);
+                projectsKanban = createInitialProjectsData();
+            }
+        };
+
+        const saveKanbanData = () => {
+            try {
+                localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projectsKanban));
+                return true;
+            } catch (error) {
+                console.error("Erro ao salvar Projetos:", error);
+                showMessage("Erro: Falha ao salvar Projetos localmente.", true);
+                return false;
+            }
+        };
+
+        const resetKanbanData = () => {
+            localStorage.removeItem(PROJECTS_STORAGE_KEY);
+            projectsKanban = createInitialProjectsData();
+            renderApplication();
+            showMessage("Dados do Kanban zerados com sucesso! Novo ciclo de projetos iniciado.");
+        };
+
+
+        // --- FUNÇÕES DE ROTEAMENTO (Chamadas pelos botões globais) ---
+        
+        window.handleSave = () => {
             const saveButton = document.getElementById('save-tasks-btn');
             if(saveButton) {
                 saveButton.disabled = true;
                 saveButton.innerText = 'Salvando...';
             }
             
-            const success = saveTasksToLocalStorage(dailyTasks);
+            let success;
+            if (activeTab === 'tasks') {
+                success = saveDailyTasksData();
+            } else {
+                success = saveKanbanData();
+            }
 
             if(saveButton) {
                 saveButton.disabled = false;
                 saveButton.innerText = 'Salvar Localmente';
             }
-            if (success) showMessage("Painel de Tarefas salvo com sucesso!");
+            if (success) showMessage("Dados salvos com sucesso!");
         };
 
-        // --- NOVO: EXPORTAÇÃO DE DADOS (JSON) ---
-        window.exportDataAsJSON = () => {
+        window.handleExport = () => {
+            const dataToExport = activeTab === 'tasks' ? dailyTasks : projectsKanban;
+            const fileNamePrefix = activeTab === 'tasks' ? 'Tarefas' : 'Projetos_Kanban';
+            
             try {
-                const dataStr = JSON.stringify(dailyTasks, null, 2);
-                // Cria um Blob e um URL para download
+                const dataStr = JSON.stringify(dataToExport, null, 2);
                 const blob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
-
-                const exportFileName = `DEPARTAMENTO_OPERACIONAL_Tarefas_${new Date().toISOString().slice(0, 10)}.json`;
+                const exportFileName = `DEPARTAMENTO_OPERACIONAL_${fileNamePrefix}_${new Date().toISOString().slice(0, 10)}.json`;
 
                 const linkElement = document.createElement('a');
                 linkElement.setAttribute('href', url);
                 linkElement.setAttribute('download', exportFileName);
                 linkElement.click();
                 
-                // Limpeza
                 URL.revokeObjectURL(url);
-                showMessage("Dados exportados! Transfira este arquivo JSON para outro dispositivo para sincronizar.");
+                showMessage(`Dados de ${fileNamePrefix} exportados!`);
             } catch (error) {
-                showMessage("Erro ao exportar dados.", true);
+                showMessage(`Erro ao exportar dados de ${fileNamePrefix}.`, true);
                 console.error("Export Error:", error);
             }
         };
 
-        // --- NOVO: IMPORTAÇÃO DE DADOS (JSON) ---
-        window.importDataFromJSON = () => {
+        window.handleImport = () => {
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.accept = 'application/json';
@@ -345,22 +498,24 @@
                 reader.onload = (event) => {
                     try {
                         const importedData = JSON.parse(event.target.result);
+                        let success = false;
                         
-                        // Validação básica: verifica se é uma estrutura de 30 dias com array de tarefas
-                        if (Array.isArray(importedData) && importedData.length === 30 && importedData[0].tarefas) {
-                            
-                            // Atualiza o estado e garante que o dayIndex está correto
-                            dailyTasks = importedData.map((day, index) => ({
-                                ...day,
-                                dayIndex: index,
-                            }));
-                            
-                            saveTasksToLocalStorage(dailyTasks); // Salva os dados importados no navegador atual
+                        if (activeTab === 'tasks' && Array.isArray(importedData) && importedData.length === 30 && importedData[0].tarefas) {
+                            dailyTasks = importedData.map((day, index) => ({ ...day, dayIndex: index, }));
+                            saveDailyTasksData();
+                            success = true;
+                        } else if (activeTab === 'kanban' && Array.isArray(importedData) && (importedData.length === 0 || importedData[0].nome)) {
+                            projectsKanban = importedData;
+                            saveKanbanData();
+                            success = true;
+                        } else {
+                             showMessage("Erro: Arquivo JSON inválido ou incompatível para a aba ativa.", true);
+                             return;
+                        }
+
+                        if (success) {
                             renderApplication();
                             showMessage("Dados importados e sincronizados localmente com sucesso!");
-
-                        } else {
-                            showMessage("Erro: Arquivo JSON inválido ou incompatível. Certifique-se de que é um arquivo de tarefas BLADETEC.", true);
                         }
                     } catch (error) {
                         showMessage("Erro ao processar o arquivo JSON. Certifique-se de que é um JSON válido.", true);
@@ -373,186 +528,305 @@
             fileInput.click();
         };
 
-        // --- ZERAR DADOS E INICIAR NOVO CICLO ---
-        window.resetTasks = () => {
-             // Utiliza uma simulação de modal com a mensagem, já que alert/confirm são proibidos
-             const confirmMessage = "Tem certeza que deseja apagar TODOS os dados do Painel de Tarefas e iniciar um novo ciclo de 30 dias? Esta ação é irreversível!";
+        window.handleReset = () => {
+             const confirmMessage = activeTab === 'tasks' 
+                ? "Tem certeza que deseja apagar TODOS os dados das TAREFAS Diárias e iniciar um novo ciclo de 30 dias? Esta ação é irreversível!"
+                : "Tem certeza que deseja apagar TODOS os dados do KANBAN de Projetos e iniciar um novo ciclo? Esta ação é irreversível!";
              
-             const currentButtonHtml = document.querySelector('[onclick="resetTasks()"]').innerHTML;
-             const buttonElement = document.querySelector('[onclick="resetTasks()"]');
+             const buttonElement = document.querySelector('[onclick="handleReset()"]');
+             const originalText = buttonElement.dataset.originalText || buttonElement.innerText;
+             buttonElement.dataset.originalText = originalText;
 
              if (buttonElement.innerText.includes("CONFIRMAR")) {
-                 // Confirmação recebida
-                 try {
-                    localStorage.removeItem(TASKS_STORAGE_KEY);
-                    dailyTasks = createInitialTasksData(); // Recria a estrutura
-                    renderApplication();
-                    showMessage("Dados zerados com sucesso! Novo ciclo de 30 dias iniciado.", false);
-                    buttonElement.innerHTML = currentButtonHtml; // Volta ao normal
-                 } catch (error) {
-                    showMessage("Erro ao zerar dados.", true);
+                 if (activeTab === 'tasks') {
+                    resetDailyTasks();
+                 } else {
+                    resetKanbanData();
                  }
+                 buttonElement.innerText = originalText;
              } else {
-                 // Primeira clicada: pede confirmação
                  showMessage(confirmMessage, true);
-                 buttonElement.innerHTML = 'CONFIRMAR? Clique para Zerar!';
+                 buttonElement.innerText = 'CONFIRMAR? Clique para Zerar!';
                  
-                 // Reseta o botão após 3 segundos, caso o usuário não clique
                  setTimeout(() => {
                      if (buttonElement.innerText.includes("CONFIRMAR")) {
-                        buttonElement.innerHTML = currentButtonHtml;
+                         buttonElement.innerText = originalText;
                      }
                  }, 3000);
              }
         };
 
-        // --- EXPORTAR PARA PDF (USANDO IMPRESSÃO NATIVA) ---
         window.exportToPDF = () => {
-            showMessage("Gerando pré-visualização de impressão (PDF)...");
-            window.print();
+             showMessage("Gerando pré-visualização de impressão (PDF)...");
+             
+             // AJUSTE: Adiciona classe ao body para impressão isolada
+             if (activeTab === 'tasks') {
+                 document.body.classList.add('printing-tasks');
+                 document.body.classList.remove('printing-kanban');
+             } else {
+                 document.body.classList.add('printing-kanban');
+                 document.body.classList.remove('printing-tasks');
+             }
+
+             window.print();
         };
-
-
-        // --- FUNÇÕES DE MANIPULAÇÃO DE TAREFAS (Ações de CRUD) ---
         
-        window.addTask = (dayIndex) => {
-            const dayData = dailyTasks[dayIndex];
-            const inputElement = document.getElementById(`new-task-input-${dayIndex}`);
-
-            if (!dayData || !inputElement) return;
-
-            const newTaskId = getNextTaskId(dayData.tarefas);
-            const newTaskDesc = inputElement.value.trim();
-            
-            if (newTaskDesc.length < 3) {
-                showMessage("A descrição da tarefa deve ter pelo menos 3 caracteres.", true);
-                return;
-            }
-
-            dayData.tarefas.push({
-                id: newTaskId,
-                descricao: newTaskDesc,
-                status: 'Pendente',
-            });
-            
-            inputElement.value = ''; // Limpa o input
-            
-            // Re-renderiza e salva
-            renderApplication();
-            saveTasksToLocalStorage(dailyTasks);
+        // AJUSTE: Limpa as classes do body após a impressão
+        window.onafterprint = () => {
+            document.body.classList.remove('printing-tasks', 'printing-kanban');
         };
 
-        window.updateTask = (dayIndex, taskId, field, value) => {
-            const dayData = dailyTasks[dayIndex];
-            if (!dayData) return;
+        // --- MANIPULAÇÃO DO MODAL (Consolidado) ---
+        
+        window.closeDetailModal = () => {
+            document.getElementById('detail-modal').classList.add('hidden');
+            activeDataInModal = null;
+            // Garante que o painel é atualizado após fechar o modal
+            if (activeTab === 'tasks') {
+                renderTasksView();
+            } else {
+                renderKanbanView();
+            }
+        };
 
-            const task = dayData.tarefas.find(t => t.id === taskId);
-            if (task) {
-                if (field === 'descricao') {
-                    task.descricao = value;
-                } else if (field === 'status') {
-                    task.status = value;
-                    // Força a re-renderização para atualizar a cor do card/dashboard
-                    renderApplication(); 
-                }
+        window.handleModalSave = () => {
+            if (!activeDataInModal) return;
+
+            if (activeDataInModal.type === 'task') {
+                const { dayIndex, taskId } = activeDataInModal;
+                const newDescription = document.getElementById('modal-task-description').value.trim();
+                const newStatus = document.getElementById('modal-task-status').value;
                 
-                // Salva automaticamente no localStorage
-                saveTasksToLocalStorage(dailyTasks);
+                const dayData = dailyTasks[dayIndex];
+                const task = dayData.tarefas.find(t => t.id === taskId);
+
+                if (task) {
+                    task.descricao = newDescription; // A descrição é salva de volta
+                    task.status = newStatus;
+                    saveDailyTasksData();
+                    showMessage("Detalhes da tarefa salvos e painel atualizado.");
+                    closeDetailModal();
+                }
+            } else if (activeDataInModal.type === 'project') {
+                // Lógica Kanbam (permanece inalterada e funcional)
+                
+                let project = activeDataInModal.isNew
+                    ? {}
+                    : projectsKanban.find(p => p.id === activeDataInModal.id);
+
+                if (!project && !activeDataInModal.isNew) {
+                    showMessage("Erro ao encontrar projeto para salvar.", true);
+                    return;
+                }
+
+                project.nome = document.getElementById('modal-project-name').value.trim();
+                project.dataInicial = document.getElementById('modal-project-start-date').value;
+                project.dataFinal = document.getElementById('modal-project-end-date').value;
+                project.descricao = document.getElementById('modal-project-description').value.trim();
+                project.status = document.getElementById('modal-project-status').value;
+                project.categoria = document.getElementById('modal-project-priority').value;
+                project.executor = document.getElementById('modal-project-executor').value.trim();
+                // O tempo de execução é pego do campo (que pode ter sido auto-calculado ou inserido manualmente)
+                project.tempoExecucao = document.getElementById('modal-project-execution-time').value.trim();
+                project.custo = document.getElementById('modal-project-cost').value.trim();
+                
+                if (activeDataInModal.isNew) {
+                     if (!project.nome) { showMessage("O nome do projeto é obrigatório.", true); return; }
+
+                     const newProjectId = getNextId(projectsKanban);
+                     project.id = newProjectId;
+                     projectsKanban.push(project);
+                     showMessage("Novo projeto criado com sucesso!");
+                } else {
+                    showMessage("Detalhes do projeto salvos e Kanbam atualizado.");
+                }
+
+                saveKanbanData();
+                closeDetailModal();
             }
         };
         
-        window.deleteTask = (dayIndex, taskId) => {
-            const dayData = dailyTasks[dayIndex];
-            if (!dayData) return;
+        // --- FUNÇÕES ESPECÍFICAS DE ABERTURA DE MODAL (Tarefas) ---
 
-            dayData.tarefas = dayData.tarefas.filter(t => t.id !== taskId);
-            
-            // Re-renderiza para remover a tarefa e atualiza o dashboard
-            renderApplication();
-
-            // Salva automaticamente no localStorage
-            saveTasksToLocalStorage(dailyTasks);
-        };
-        
-        // --- NOVO: LÓGICA DO MODAL ---
         window.openTaskDetailModal = (dayIndex, taskId) => {
             const day = dailyTasks[dayIndex];
             const task = day.tarefas.find(t => t.id === taskId);
 
             if (!task) return showMessage("Erro: Tarefa não encontrada.", true);
+            
+            // CORREÇÃO: Pega apenas a primeira linha ou uma parte do texto para o título do modal
+            const shortTitle = task.descricao.split('\n')[0].substring(0, 50); // Limita a 50 caracteres
 
-            activeTaskInModal = { dayIndex, taskId };
+            activeDataInModal = { type: 'task', dayIndex, taskId };
+            // CORREÇÃO: Usa o shortTitle (título curto) para o cabeçalho do modal
+            document.getElementById('modal-title').innerText = `Tarefa: ${shortTitle}`;
+            document.getElementById('modal-save-btn').innerText = 'Salvar Alterações';
 
-            // 1. Preenche o status
-            const statusSelect = document.getElementById('modal-status');
-            statusSelect.innerHTML = STATUS_OPTIONS.map(opt => `
-                <option value="${opt.value}" ${task.status === opt.value ? 'selected' : ''}>
-                    ${opt.name}
-                </option>
-            `).join('');
-
-            // 2. Preenche a descrição
-            document.getElementById('modal-description').value = task.descricao;
-
-            // 3. Preenche info do dia
-            document.getElementById('modal-day-info').innerText = `Dia: ${day.dataFormatada} (${day.diaSemana})`;
-
-            // 4. Exibe o modal
-            document.getElementById('task-detail-modal').classList.remove('hidden');
+            // Conteúdo do Modal para Tarefa
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <label for="modal-task-status" class="font-semibold text-gray-700">Status:</label>
+                    <select id="modal-task-status" class="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                        ${STATUS_OPTIONS.map(opt => `
+                            <option value="${opt.value}" ${task.status === opt.value ? 'selected' : ''}>${opt.name}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label for="modal-task-description" class="font-semibold text-gray-700 block mb-1">Descrição Detalhada:</label>
+                    <textarea 
+                        id="modal-task-description" 
+                        rows="6" 
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 resize-y"
+                        placeholder="Detalhes e passos para executar a tarefa..."
+                    >${task.descricao}</textarea>
+                </div>
+                <p id="modal-day-info" class="text-xs text-gray-500 text-right">Dia: ${day.dataFormatada} (${day.diaSemana})</p>
+            `;
+            
+            document.getElementById('detail-modal').classList.remove('hidden');
         };
 
-        window.closeTaskDetailModal = () => {
-            document.getElementById('task-detail-modal').classList.add('hidden');
-            activeTaskInModal = null;
-            // Força o re-render para garantir que a grade está atualizada (caso o usuário tenha editado o status pelo modal)
-            renderApplication();
-        };
+        // --- FUNÇÕES ESPECÍFICAS DE ABERTURA DE MODAL (Projetos) ---
+        
+        // AJUSTE CÁLCULO DE DIAS (NOVA FUNÇÃO)
+        window.calculateExecutionDays = () => {
+            const startDateEl = document.getElementById('modal-project-start-date');
+            const endDateEl = document.getElementById('modal-project-end-date');
+            const executionTimeEl = document.getElementById('modal-project-execution-time');
 
-        window.saveTaskDetailFromModal = () => {
-            if (!activeTaskInModal) return;
+            if (!startDateEl || !endDateEl || !executionTimeEl) return;
 
-            const { dayIndex, taskId } = activeTaskInModal;
-            
-            const newDescription = document.getElementById('modal-description').value.trim();
-            const newStatus = document.getElementById('modal-status').value;
-            
-            // 1. Atualiza o estado
-            const dayData = dailyTasks[dayIndex];
-            const task = dayData.tarefas.find(t => t.id === taskId);
+            const startDate = new Date(startDateEl.value);
+            const endDate = new Date(endDateEl.value);
 
-            if (task) {
-                task.descricao = newDescription;
-                task.status = newStatus;
+            // Verifica se as datas são válidas e se a data final é após a inicial
+            if (startDateEl.value && endDateEl.value && startDate.getTime() <= endDate.getTime()) {
+                // Adiciona +1 dia de fuso (para evitar bugs de GMT) e calcula a diferença
+                const startUTC = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
+                const endUTC = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+
+                const diffTime = Math.abs(endUTC - startUTC);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para ser inclusivo
                 
-                // 2. Salva e fecha
-                saveTasksToLocalStorage(dailyTasks);
-                showMessage("Detalhes da tarefa salvos e painel atualizado.");
-                closeTaskDetailModal(); 
+                if (diffDays === 1) {
+                    executionTimeEl.value = '1 dia';
+                } else {
+                    executionTimeEl.value = `${diffDays} dias`;
+                }
+            } else {
+                // Se as datas forem inválidas ou a data final for anterior, não calcula
+                // (Mantém o valor que o usuário digitou ou deixa em branco)
             }
         };
-        // --- FIM LÓGICA DO MODAL ---
+
+        window.openProjectDetailModal = (projectId, isNew = false) => {
+            let project = null;
+            if (!isNew) {
+                project = projectsKanban.find(p => p.id === projectId);
+                if (!project) return showMessage("Erro: Projeto não encontrado.", true);
+            } else {
+                project = { 
+                    nome: 'Novo Projeto', dataInicial: new Date().toISOString().split('T')[0], dataFinal: '', 
+                    descricao: '', status: 'Pendente', categoria: 'Prioridade 3', executor: '', tempoExecucao: '', custo: '' 
+                };
+            }
+
+            activeDataInModal = { type: 'project', id: isNew ? null : projectId, isNew: isNew };
+            document.getElementById('modal-title').innerText = isNew ? 'Novo Projeto Kanban' : `Projeto: ${project.nome}`;
+            
+            // Define o texto do botão Salvar/Criar no modal de projeto
+            document.getElementById('modal-save-btn').innerText = isNew ? 'Criar Projeto' : 'Salvar Alterações';
+
+            // Conteúdo do Modal para Projeto
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = `
+                <div class="space-y-3">
+                    <label for="modal-project-name" class="font-semibold text-gray-700 block mb-1">Nome do Projeto:</label>
+                    <input type="text" id="modal-project-name" value="${project.nome || ''}" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-700" required>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="modal-project-start-date" class="font-semibold text-gray-700 block mb-1">Data Inicial:</label>
+                        <!-- AJUSTE CÁLCULO DE DIAS: Adicionado onchange() -->
+                        <input type="date" id="modal-project-start-date" value="${project.dataInicial || ''}" onchange="calculateExecutionDays()" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-700">
+                    </div>
+                    <div>
+                        <label for="modal-project-end-date" class="font-semibold text-gray-700 block mb-1">Data Final:</label>
+                        <!-- AJUSTE CÁLCULO DE DIAS: Adicionado onchange() -->
+                        <input type="date" id="modal-project-end-date" value="${project.dataFinal || ''}" onchange="calculateExecutionDays()" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-700">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="modal-project-description" class="font-semibold text-gray-700 block mb-1">Descrição (Detalhes):</label>
+                    <textarea 
+                        id="modal-project-description" 
+                        rows="4" 
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 resize-y"
+                        placeholder="Detalhes, objetivos e escopo do projeto..."
+                    >${project.descricao || ''}</textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="modal-project-status" class="font-semibold text-gray-700 block mb-1">Status:</label>
+                        <select id="modal-project-status" class="w-full p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                            ${KANBAN_STATUS_OPTIONS.map(opt => `
+                                <option value="${opt.value}" ${project.status === opt.value ? 'selected' : ''}>${opt.name}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="modal-project-priority" class="font-semibold text-gray-700 block mb-1">Prioridade:</label>
+                        <select id="modal-project-priority" class="w-full p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                            ${PRIORITY_OPTIONS.map(opt => `
+                                <option value="${opt.value}" ${project.categoria === opt.value ? 'selected' : ''}>${opt.name}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="border-t pt-4 mt-4 space-y-3">
+                    <h4 class="font-bold text-gray-800">Informações de Execução (Registro de Detalhes)</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label for="modal-project-executor" class="text-xs font-semibold text-gray-600 block mb-1">Quem Executará:</label>
+                            <input type="text" id="modal-project-executor" value="${project.executor || ''}" placeholder="Responsável/Equipe" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        </div>
+                         <div>
+                            <label for="modal-project-execution-time" class="text-xs font-semibold text-gray-600 block mb-1">Tempo de Execução (Estimado):</label>
+                            <input type="text" id="modal-project-execution-time" value="${project.tempoExecucao || ''}" placeholder="Ex: 80 horas / 2 semanas" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label for="modal-project-cost" class="text-xs font-semibold text-gray-600 block mb-1">Custo Estimado (R$):</label>
+                            <input type="text" id="modal-project-cost" value="${project.custo || ''}" placeholder="Ex: R$ 5.000,00" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('detail-modal').classList.remove('hidden');
+        };
 
 
         // --- CÁLCULOS DO DASHBOARD (KPIs) ---
 
+        // KPIs de Tarefas Diárias (ORIGINAL)
         const calculateTaskKPIs = (data) => {
-            if (!data || data.length === 0) {
-                return { total: 0, completed: 0, pending: 0, inProgress: 0, dailyProgress: '0%', weeklyProgress: '0%' };
-            }
+            if (!data || data.length === 0) { return { total: 0, completed: 0, pending: 0, inProgress: 0, dailyProgress: '0%', weeklyProgress: '0%' }; }
             
-            // 1. Cálculos de 30 dias (Geral)
             let total = 0;
             let completed = 0;
             let pending = 0;
             let inProgress = 0;
-
-            // 2. Cálculos de Período Específico
             let dailyTotal = 0;
             let dailyCompleted = 0;
             let weeklyTotal = 0;
             let weeklyCompleted = 0;
-            
-            const todayIndex = 0; // O dia atual é sempre o primeiro item do array
+            const todayIndex = 0;
             
             data.forEach((day, index) => {
                 day.tarefas.forEach(task => {
@@ -562,15 +836,12 @@
                     else if (task.status === 'Em Andamento') inProgress++;
                 });
 
-                // Calcula o progresso diário (Dia 0)
                 if (index === todayIndex) {
                     day.tarefas.forEach(task => {
                         dailyTotal++;
                         if (task.status === 'Executada') dailyCompleted++;
                     });
                 }
-
-                // Calcula o progresso semanal (Dias 0 a 6)
                 if (index >= todayIndex && index < todayIndex + 7) {
                     day.tarefas.forEach(task => {
                         weeklyTotal++;
@@ -584,6 +855,26 @@
             
             return { total, completed, pending, inProgress, dailyProgress: `${dailyProgress}%`, weeklyProgress: `${weeklyProgress}%` };
         };
+        
+        // KPIs de Kanban de Projetos (NOVO)
+        const calculateProjectKPIs = (data) => {
+            const total = data.length;
+            const completed = data.filter(p => p.status === 'Finalizado').length;
+            const pending = data.filter(p => p.status === 'Pendente').length;
+            const inProgress = data.filter(p => p.status === 'Em Andamento').length;
+            
+            const completionRate = total > 0 ? ((completed / total) * 100).toFixed(0) : 0;
+
+            const now = new Date().getTime();
+            let overdue = 0;
+            data.filter(p => p.status !== 'Finalizado').forEach(p => {
+                if (p.dataFinal && new Date(p.dataFinal).getTime() < now) {
+                    overdue++;
+                }
+            });
+
+            return { total, completed, pending, inProgress, completionRate: `${completionRate}%`, overdue };
+        };
 
         // --- RENDERING COMPONENTS (Geração de HTML) ---
 
@@ -594,6 +885,7 @@
             </div>
         `;
 
+        // Renderiza o Dashboard de Tarefas Diárias (ORIGINAL)
         const renderTaskDashboard = (kpis) => {
             const kpiCards = [
                 renderKPICard("Progresso Hoje", kpis.dailyProgress, "bg-indigo-100 text-indigo-800"),
@@ -605,7 +897,7 @@
 
             return `
                 <div class="bg-white p-4 rounded-xl shadow-lg">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">Métricas de Execução</h2>
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">Métricas de Execução (Tarefas Diárias)</h2>
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                         ${kpiCards}
                     </div>
@@ -613,7 +905,27 @@
             `;
         };
 
-        // Renderiza a grade de tarefas
+        // Renderiza o Dashboard de Kanban de Projetos (NOVO)
+        const renderKanbanDashboard = (kpis) => {
+            const kpiCards = [
+                renderKPICard("Taxa de Conclusão", kpis.completionRate, "bg-indigo-100 text-indigo-800"),
+                renderKPICard("Projetos Concluídos", kpis.completed, "bg-emerald-100 text-emerald-800"),
+                renderKPICard("Projetos em Andamento", kpis.inProgress, "bg-blue-100 text-blue-800"),
+                renderKPICard("Projetos Pendentes", kpis.pending, "bg-amber-100 text-amber-800"),
+                renderKPICard("Atrasados (Não Finalizados)", kpis.overdue, kpis.overdue > 0 ? "bg-red-100 text-red-800 font-bold" : "bg-gray-200 text-gray-800"),
+            ].join('');
+
+            return `
+                <div class="bg-white p-4 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">Métricas de Acompanhamento (Kanban de Projetos)</h2>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                        ${kpiCards}
+                    </div>
+                </div>
+            `;
+        };
+        
+        // Renderiza a grade de tarefas (ORIGINAL)
         const renderTasksGrid = (data) => {
             const getTaskCardColor = (status) => {
                 const statusMap = {
@@ -630,13 +942,11 @@
                     return `
                         <div class="p-3 mb-2 rounded-lg shadow-sm border border-gray-200 bg-white">
                             <div class="flex items-center justify-between gap-2">
-                                <!-- NOVO: Adicionado onclick para abrir o modal -->
                                 <input
                                     type="text"
                                     id="task-desc-${day.dayIndex}-${task.id}"
                                     value="${task.descricao}"
                                     onclick="openTaskDetailModal(${day.dayIndex}, ${task.id})"
-                                    onchange="updateTask(${day.dayIndex}, ${task.id}, 'descricao', this.value)"
                                     class="text-sm font-medium text-gray-800 w-full bg-transparent border border-transparent hover:border-gray-200 p-1 -m-1 rounded focus:border-indigo-500 focus:ring-0 cursor-pointer"
                                     readonly
                                 />
@@ -647,13 +957,11 @@
                             <div class="mt-2 flex items-center justify-between">
                                 <span class="text-xs font-semibold ${statusConfig.color.split(' ').slice(1).join(' ')} p-1 rounded-full">${task.status}</span>
                                 <select
-                                    onchange="updateTask(${day.dayIndex}, ${task.id}, 'status', this.value)"
+                                    onchange="updateTaskStatus(${day.dayIndex}, ${task.id}, this.value)"
                                     class="p-1 text-xs border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
                                 >
                                     ${STATUS_OPTIONS.map(opt => `
-                                        <option value="${opt.value}" ${task.status === opt.value ? 'selected' : ''}>
-                                            ${opt.name}
-                                        </option>
+                                        <option value="${opt.value}" ${task.status === opt.value ? 'selected' : ''}>${opt.name}</option>
                                     `).join('')}
                                 </select>
                             </div>
@@ -662,8 +970,6 @@
                 }).join('');
                 
                 const dayHeaderColor = day.diaSemana === 'Dom' || day.diaSemana === 'Sáb' ? 'bg-red-100/80 text-red-800' : 'bg-indigo-100/80 text-indigo-800';
-                
-                // Determina a cor da borda do card com base nas tarefas. Se houver alguma não executada, é 'Em Andamento', senão 'Executada'.
                 const cardBorderStatus = day.tarefas.length > 0 ? day.tarefas.find(t => t.status !== 'Executada') ? 'Em Andamento' : 'Executada' : '';
 
                 return `
@@ -695,41 +1001,221 @@
                 `;
             }).join('');
         };
+        
+        // Renderiza o Kanban de Projetos (NOVO)
+        const renderKanbanBoard = (data) => {
+            const columns = KANBAN_STATUS_OPTIONS.map(statusConfig => {
+                const projectsInColumn = data.filter(p => p.status === statusConfig.value);
+                
+                const projectsHtml = projectsInColumn.map(project => {
+                    const priorityConfig = PRIORITY_OPTIONS.find(opt => opt.value === project.categoria);
+                    const isOverdue = project.status !== 'Finalizado' && project.dataFinal && new Date(project.dataFinal).getTime() < new Date().getTime();
+                    
+                    return `
+                        <div class="bg-white p-4 rounded-xl shadow-md mb-3 project-card-border ${statusConfig.borderClass}">
+                            <div class="flex items-start justify-between">
+                                <span class="font-bold text-gray-800 text-sm mb-1">${project.nome}</span>
+                                <!-- Botão "i" para detalhes -->
+                                <button 
+                                    onclick="openProjectDetailModal(${project.id})" 
+                                    class="text-indigo-500 hover:text-indigo-700 ml-2"
+                                    title="Detalhes do Projeto"
+                                >
+                                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                </button>
+                            </div>
+                            
+                            <p class="text-xs text-gray-600">${project.executor || 'Não Atribuído'}</p>
+                            
+                            <div class="mt-2 flex items-center justify-between text-xs">
+                                <span class="font-semibold ${priorityConfig.color}">${priorityConfig.name}</span>
+                                
+                                <span class="text-gray-500 ${isOverdue ? 'text-red-500 font-bold' : ''}">
+                                    ${isOverdue ? 'Atrasado: ' : 'Fim: '} ${formatISODate(project.dataFinal)}
+                                </span>
+                            </div>
+                            
+                            <!-- Dropdown para mover entre colunas (Status) -->
+                            <div class="mt-3">
+                                <label class="text-xs text-gray-500 block mb-1">Mudar Status:</label>
+                                <select 
+                                    onchange="updateProjectStatus(${project.id}, this.value)"
+                                    class="w-full p-1 text-xs border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 text-gray-800"
+                                >
+                                    ${KANBAN_STATUS_OPTIONS.map(opt => `
+                                        <option value="${opt.value}" ${project.status === opt.value ? 'selected' : ''}>${opt.name}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
 
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <!-- AJUSTE DE ALTURA 4: Adicionado md:h-full para que a coluna se estique na visualização de desktop -->
+                    <div class="flex-shrink-0 w-full md:h-full md:w-1/3 lg:w-1/4 xl:w-1/5">
+                        <div class="h-full rounded-xl shadow-xl p-3 ${statusConfig.color} flex flex-col">
+                            <h3 class="text-lg font-bold mb-3">${statusConfig.name} (${projectsInColumn.length})</h3>
+                            <div class="flex-grow space-y-3 overflow-y-auto task-scroll-area pr-2">
+                                ${projectsHtml.length > 0 ? projectsHtml : `<p class="text-sm text-white/70 italic text-center p-4">Nenhum projeto em ${statusConfig.name}.</p>`}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return columns;
+        };
+
+
+        // --- MANIPULAÇÃO DE TAREFAS (Ações de CRUD - ORIGINAL) ---
+        
+        window.addTask = (dayIndex) => {
+            const dayData = dailyTasks[dayIndex];
+            const inputElement = document.getElementById(`new-task-input-${dayIndex}`);
+
+            if (!dayData || !inputElement) return;
+
+            const newTaskId = getNextId(dayData.tarefas);
+            const newTaskDesc = inputElement.value.trim();
+            
+            if (newTaskDesc.length < 3) { showMessage("A descrição da tarefa deve ter pelo menos 3 caracteres.", true); return; }
+
+            dayData.tarefas.push({
+                id: newTaskId,
+                descricao: newTaskDesc,
+                status: 'Pendente',
+            });
+            
+            inputElement.value = '';
+            renderTasksView();
+            saveDailyTasksData();
+        };
+
+        window.updateTaskStatus = (dayIndex, taskId, value) => {
+            const dayData = dailyTasks[dayIndex];
+            if (!dayData) return;
+
+            const task = dayData.tarefas.find(t => t.id === taskId);
+            if (task) {
+                task.status = value;
+                renderTasksView(); 
+                saveDailyTasksData();
+            }
+        };
+        
+        window.deleteTask = (dayIndex, taskId) => {
+            const dayData = dailyTasks[dayIndex];
+            if (!dayData) return;
+
+            dayData.tarefas = dayData.tarefas.filter(t => t.id !== taskId);
+            renderTasksView();
+            saveDailyTasksData();
+        };
+
+        // --- MANIPULAÇÃO DE PROJETOS (Ações de CRUD - NOVO) ---
+        
+        window.updateProjectStatus = (projectId, newStatus) => {
+            const project = projectsKanban.find(p => p.id === projectId);
+            if (project) {
+                project.status = newStatus;
+                renderKanbanView();
+                saveKanbanData();
+            }
+        };
+        
+        window.deleteProject = (projectId) => {
+             // Simulação de modal de confirmação (já que alert/confirm são proibidos)
+             showMessage("Projeto excluído. (Pressione F5 para recarregar se o Kanbam não atualizar imediatamente).", true);
+             projectsKanban = projectsKanban.filter(p => p.id !== projectId);
+             renderKanbanView();
+             saveKanbanData();
+        };
+
+        // --- RENDERIZAÇÃO POR VIEW ---
+
+        const renderTasksView = () => {
+            const gridContainer = document.getElementById('tasks-grid');
+            const dashboardContainer = document.getElementById('tasks-dashboard-container');
+            
+            const kpis = calculateTaskKPIs(dailyTasks);
+            dashboardContainer.innerHTML = renderTaskDashboard(kpis);
+            gridContainer.innerHTML = renderTasksGrid(dailyTasks);
+
+            document.getElementById('tasks-view').classList.remove('hidden');
+            document.getElementById('kanban-view').classList.add('hidden');
+            document.getElementById('tasks-dashboard-container').classList.remove('hidden');
+            document.getElementById('kanban-dashboard-container').classList.add('hidden');
+        };
+
+        const renderKanbanView = () => {
+            const boardContainer = document.getElementById('kanban-board');
+            const dashboardContainer = document.getElementById('kanban-dashboard-container');
+            
+            const kpis = calculateProjectKPIs(projectsKanban);
+            dashboardContainer.innerHTML = renderKanbanDashboard(kpis);
+            boardContainer.innerHTML = renderKanbanBoard(projectsKanban);
+
+            document.getElementById('tasks-view').classList.add('hidden');
+            document.getElementById('kanban-view').classList.remove('hidden');
+            document.getElementById('tasks-dashboard-container').classList.add('hidden');
+            document.getElementById('kanban-dashboard-container').classList.remove('hidden');
+        };
+
+        // --- NAVEGAÇÃO ENTRE ABAS ---
+        
+        window.switchTab = (tabName) => {
+            activeTab = tabName;
+            
+            const taskTabBtn = document.getElementById('tab-tasks');
+            const kanbanTabBtn = document.getElementById('tab-kanban');
+
+            const activateButton = (button) => {
+                button.classList.remove(...button.dataset.inactiveClass.split(' '));
+                button.classList.add(...button.dataset.activeClass.split(' '));
+            };
+
+            const deactivateButton = (button) => {
+                button.classList.remove(...button.dataset.activeClass.split(' '));
+                button.classList.add(...button.dataset.inactiveClass.split(' '));
+            };
+            
+            if (tabName === 'tasks') {
+                activateButton(taskTabBtn);
+                deactivateButton(kanbanTabBtn);
+                renderTasksView();
+            } else {
+                activateButton(kanbanTabBtn);
+                deactivateButton(taskTabBtn);
+                renderKanbanView();
+            }
+        };
 
         // --- RENDERIZAÇÃO PRINCIPAL DA APLICAÇÃO ---
 
         const renderApplication = () => {
-            const gridContainer = document.getElementById('tasks-grid');
-            const dashboardContainer = document.getElementById('dashboard-container');
             const loadingIndicator = document.getElementById('loading-initial');
             
+            if (!isAppReady) { return; }
+
+            // CORREÇÃO: Remove o indicador de carregamento inicial quando a aplicação está pronta
             if (loadingIndicator) loadingIndicator.remove();
             
-            if (!isAppReady) {
-                 gridContainer.innerHTML = `<div class="text-center p-10 text-lg font-medium text-indigo-600">Inicializando painel...</div>`;
-                 return;
-            }
-            
-            // 1. Calcula KPIs
-            const kpis = calculateTaskKPIs(dailyTasks);
-
-            // 2. Renderiza o Dashboard
-            dashboardContainer.innerHTML = renderTaskDashboard(kpis);
-            
-            // 3. Renderiza a Grade de Tarefas
-            gridContainer.innerHTML = renderTasksGrid(dailyTasks);
+            // Renderiza o painel baseado na aba ativa
+            switchTab(activeTab);
         };
         
         // --- INICIALIZAÇÃO DA APLICAÇÃO ---
         const initializeApplication = () => {
-            // 1. Carrega o estado salvo localmente
-            loadDataFromLocalStorage();
+            loadDailyTasksData();
+            loadKanbanData();
             
-            // 2. Define que a aplicação está pronta (isAppReady)
             isAppReady = true;
 
-            // 3. Renderiza a interface
+            // Define a aba inicial e renderiza
+            const initialTab = 'tasks';
+            
             renderApplication();
         };
 
